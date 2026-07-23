@@ -1,15 +1,17 @@
+// --- KEEP-ALIVE EXPRESS WEB SERVER (For UptimeRobot) ---
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('Bot is awake!');
+  res.send('Bot is awake and running!');
 });
 
 app.listen(port, () => {
-  console.log(`Web server running on port ${port}`);
+  console.log(`🌐 Keep-alive server running on port ${port}`);
 });
 
+// --- DISCORD BOT LOGIC ---
 require('dotenv').config();
 const { 
   Client, 
@@ -28,6 +30,7 @@ const { DisTube } = require('distube');
 const { SpotifyPlugin } = require('@distube/spotify');
 const { YtDlpPlugin } = require('@distube/yt-dlp');
 const { SoundCloudPlugin } = require('@distube/soundcloud');
+const ytsr = require('@distube/ytsr');
 
 // Credentials from Environment
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -38,7 +41,7 @@ if (!BOT_TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
-const LOADING_EMOJI = '<a:loading:1529897225675866163>';
+const LOADING_EMOJI = '⏳';
 
 // Initialize Client
 const client = new Client({
@@ -202,21 +205,23 @@ client.on('interactionCreate', async (interaction) => {
       });
 
       try {
-        const searchResults = await distube.search(query, { limit: 5 });
+        // Use @distube/ytsr to resolve multi-result queries safely
+        const searchResults = await ytsr(query, { limit: 5 });
+        const items = searchResults.items.filter(item => item.type === 'video');
 
-        if (!searchResults || searchResults.length === 0) {
+        if (!items || items.length === 0) {
           return interaction.editReply({
             embeds: [createEmbed(`❌ No results found for **"${query}"**`, 0xED4245)]
           });
         }
 
         // --- SINGLE RESULT CASE: Play directly without Dropdown ---
-        if (searchResults.length === 1) {
+        if (items.length === 1) {
           await interaction.editReply({
             embeds: [createEmbed(`${LOADING_EMOJI} **Found 1 match. Connecting to \`${targetChannel.name}\`...**`, 0x5865F2)]
           });
 
-          await distube.play(targetChannel, searchResults[0].url, {
+          await distube.play(targetChannel, items[0].url, {
             textChannel: interaction.channel,
             member: interaction.member
           });
@@ -231,12 +236,12 @@ client.on('interactionCreate', async (interaction) => {
           .setCustomId('select_song')
           .setPlaceholder('Choose a platform/track version to play...');
 
-        searchResults.forEach((track, idx) => {
-          const platform = track.url.includes('soundcloud') ? 'SoundCloud' : 'YouTube';
-          const author = track.uploader?.name || 'Unknown Author';
+        items.forEach((track, idx) => {
+          const author = track.author?.name || 'Unknown Author';
+          const duration = track.duration || 'N/A';
           selectMenu.addOptions({
             label: `${idx + 1}. ${track.name.substring(0, 80)}`,
-            description: `Platform: ${platform} | Author: ${author.substring(0, 25)} | ${track.formattedDuration}`,
+            description: `Author: ${author.substring(0, 25)} | Duration: ${duration}`,
             value: track.url
           });
         });
